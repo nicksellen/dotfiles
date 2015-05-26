@@ -14,12 +14,7 @@ var DOTFILE_DIR = paths.join(HOME_DIR, '.dotfiles');
 var CONFIG_FILE = paths.join(DOTFILE_DIR, 'config.json');
 var FILES_DIR = paths.join(DOTFILE_DIR, 'content');
 
-command('list').description('list paths').action(function(){
-  var state = load();
-  state.entries.forEach(function(entry){
-    console.log(entry.path);
-  });
-});
+command('list').description('list paths').action(printList);
 
 command('register [path]').description('register a path').action(function(path){
   if (!path) {
@@ -35,11 +30,13 @@ command('register [path]').description('register a path').action(function(path){
     return;
   }
   console.log('registering', path);
-  state.entries.push({
+  var entry = {
     path: path,
     guid: generateGuid(),
     tags: {}
-  });
+  };
+  state.entries.push(entry);
+  saveEntry(entry);
   save(state);
   commit('registered ' + path);
 });
@@ -121,28 +118,31 @@ command('load').description('.dotfiles > system').action(function(){
 
 });
 
+function saveEntry(entry) {
+  var src = entry.path.replace(/~/g, HOME_DIR);
+  var dst = paths.join(FILES_DIR, entry.guid);
+  var srcStat = fs.statSync(src);
+  if (srcStat.isDirectory()) {
+    console.error('not handling directories yet', src);
+    return false;
+  } else if (!srcStat.isFile()) {
+    console.warn('not found on system', src);
+    return false;
+  } else if (fileContentsEqual(src, dst)) {
+    // contents are the same
+    return false;
+  }
+  fse.copySync(src, dst);  
+  return true;
+}
+
 command('save').description('system > .dotfiles').action(function(){
   var state = load();
   var changedPaths = [];
-
   state.entries.forEach(function(entry){
-    var src = entry.path.replace(/~/g, HOME_DIR);
-    var dst = paths.join(FILES_DIR, entry.guid);
-    var srcStat = fs.statSync(src);
-    if (srcStat.isDirectory()) {
-      console.error('not handling directories yet', src);
-      return;
-    } else if (!srcStat.isFile()) {
-      console.warn('not found on system', src);
-      return;
-    } else if (fileContentsEqual(src, dst)) {
-      // contents are the same
-      return;
+    if (saveEntry(entry)) {
+      changedPaths.push(entry.path);
     }
-
-    console.log('saving contents of', src, 'to', dst);
-    fse.copySync(src, dst);
-    changedPaths.push(entry.path);
   });
   if (changedPaths.length > 0) {
     commit('updated content ' + changedPaths.join(', '));
@@ -203,8 +203,8 @@ if (process.argv[2] === 'git') {
 app.parse(process.argv);
 
 if (app.args.length === 0) {
-  app.help();
-  process.exit(1);
+  printList();
+  process.exit(0);
 }
 
 function run() {
@@ -299,4 +299,11 @@ function createReadline() {
     input: process.stdin,
     output: process.stdout
   }); 
+}
+
+function printList() {
+  var state = load();
+  state.entries.forEach(function(entry){
+    console.log(entry.path);
+  });
 }
