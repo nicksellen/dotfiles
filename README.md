@@ -1,5 +1,15 @@
 # dotfiles
 
+Yet another dotfile manager.
+
+Features:
+
+* uses git to store file content
+* register entries with `~` - will get expanded on user system
+* allows arbitary git commands on repo (e.g. add remotes anyway you like)
+* tag entries for inclusion by os/hostname/architecture (coming soon)
+* include whole directory trees (coming soon)
+
 ## init
 
 ````
@@ -17,6 +27,8 @@ Register a path into dotfiles, and copy the contents.
 ````
 dotfiles register '~/.ssh/config'
 ````
+
+(note the single quotes around arg to avoid bash expansion - we want it to be portable)
 
 * adds an entry to `~/.ssh/config.json`
 * copies the file into `~/.dotfiles/content/<uuid>`
