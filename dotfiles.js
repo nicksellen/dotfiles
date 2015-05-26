@@ -94,16 +94,8 @@ command('load').description('.dotfiles > system').action(function(){
   });
 
   if (entriesToCopy.length > 0) {
-    entriesToCopy.forEach(function(entry){
-      var src = entry.src;
-      var dst = entry.dst;
-      if (fs.existsSync(dst)) {
-        console.log('* overwrite', dst);
-      } else {
-        console.log('+ create   ', dst);
-      }
-    });
-    ask('Confirm [y/n] ? ', function(answer) {
+    diffEntries(entriesToCopy, true);
+    ask('\nConfirm load changes [y/n] ? ', function(answer) {
       if (answer !== 'y') return;
       entriesToCopy.forEach(function(entry){
         fse.copySync(entry.src, entry.dst);
@@ -117,14 +109,23 @@ command('load').description('.dotfiles > system').action(function(){
 
 command('save').description('system > .dotfiles').action(function(){
   var state = load();
-  var changedPaths = [];
+  var entriesToCopy = [];
   state.entries.forEach(function(entry){
-    if (copyEntry(entry)) {
-      changedPaths.push(entry.path);
+    if (canCopyEntry(entry)) {
+      entriesToCopy.push(entry);
     }
   });
-  if (changedPaths.length > 0) {
-    commit('updated content ' + changedPaths.join(', '));
+  if (entriesToCopy.length > 0) {
+    diffEntries(entriesToCopy);
+    ask('\nConfirm save changes [y/n] ? ', function(answer){
+      if (answer !== 'y') return;
+      var changedPaths = [];
+      entriesToCopy.forEach(function(entry){
+        copyEntry(entry);
+        changedPaths.push(entry.path);
+      });
+      commit('updated content ' + changedPaths.join(', '));
+    });
   } else {
     console.log('Nothing to do!');
   }
@@ -169,14 +170,7 @@ command('diff [path]').description('show diff from system > .dotfiles').action(f
   } else {
     entries = state.entries;
   }
-
-  var diff = requireDiff();
-
-  entries.forEach(function(entry){
-    var contentPath = getEntryContentPath(entry);
-    var systemPath = getEntrySystemPath(entry);
-    diff(contentPath, systemPath);
-  });
+  diffEntries(entries);
 });
 
 command('push').description('run git push').action(function(){
@@ -289,7 +283,7 @@ function ask(question, callback) {
   });
 }
 
-function copyEntry(entry) {
+function canCopyEntry(entry) {
   var src = getEntrySystemPath(entry);
   var dst = getEntryContentPath(entry);
   var srcStat = fs.statSync(src);
@@ -303,8 +297,16 @@ function copyEntry(entry) {
     // contents are the same
     return false;
   }
-  fse.copySync(src, dst);  
   return true;
+}
+
+function copyEntry(entry) {
+  if (canCopyEntry(entry)) {
+    fse.copySync(src, dst);  
+    return true;
+  } else {
+    return false;
+  }
 }
 
 function printList() {
@@ -322,12 +324,30 @@ function argumentsToArray(args) {
   return ary;
 }
 
-function requireDiff() {
+function diffEntries(entries, inverse) {
+  entries.forEach(function(entry){
+    var contentPath = getEntryContentPath(entry);
+    var systemPath = getEntrySystemPath(entry);
+    if (inverse) {
+      diff(systemPath, contentPath);
+    } else {
+      diff(contentPath, systemPath);
+    }
+  });
+}
+
+var __diffFn;
+function loadDiffFn() {
   var args = ['diff', '-u'];
   if (spawnSync('which', ['grc']).status === 0) {
     args.unshift('grc');
   }
   return function(a, b) {
     run.apply(null, args.concat(a, b));
-  };
+  };  
+}
+
+function diff(a, b) {
+  if (!__diffFn) __diffFn = loadDiffFn();
+  __diffFn(a, b);
 }
