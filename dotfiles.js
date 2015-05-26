@@ -14,34 +14,43 @@ var DOTFILE_DIR = paths.join(HOME_DIR, '.dotfiles');
 var CONFIG_FILE = paths.join(DOTFILE_DIR, 'config.json');
 var FILES_DIR = paths.join(DOTFILE_DIR, 'content');
 
+var HOME_DIR_RE = new RegExp('^' + escapeRegExp(HOME_DIR + '/'));
+
 command('list').description('list paths').action(printList);
 
 command('register [path]').description('register a path').action(function(path){
-  if (!path) {
-    console.error('requires path arg');
-    return;
+  if (!path) return console.error('requires path arg');
+  
+  if (HOME_DIR_RE.test(path)) {
+    path = '~' + path.substring(HOME_DIR.length);
   }
   var state = load();
   var entry = getEntryForPath(state, path);
   if (entry) return console.log('we have an existing entry for', path);
-  var src = getEntrySystemPath(entry);
-  if (!fs.existsSync(src)) {
-    console.error(src, 'not found');
-    return;
-  }
+
   var entry = {
     path: path,
     guid: generateGuid(),
     tags: {}
   };
+
+  var src = getEntrySystemPath(entry);
+  if (!fs.existsSync(src)) {
+    console.error(src, 'not found');
+    return;
+  }
   state.entries.push(entry);
-  copyEntry(entry);
+  copyEntryFromSystemToContent(entry);
   save(state);
   commit('registered ' + path);
 });
 
 command('unregister [path]').description('unregister a path').action(function(path){
   if (!path) return console.error('requires path arg');
+
+  if (HOME_DIR_RE.test(path)) {
+    path = '~' + path.substring(HOME_DIR.length);
+  }
 
   var state = load();
   var changed = false;
@@ -76,21 +85,9 @@ command('load').description('.dotfiles > system').action(function(){
   state.entries.forEach(function(entry){
     var src = getEntryContentPath(entry);
     var dst = getEntrySystemPath(entry);
-    if (!fs.existsSync(src)) {
-      console.error('missing content file for', entry.path, 'should be at', src);
-      return;
+    if (canCopy(src, dst)) {
+      entriesToCopy.push(entry);
     }
-    var dstStat = fs.statSync(dst);
-    if (dstStat.isDirectory()) {
-      console.error('not handling directories yet', dst);
-      return;
-    } else if (fileContentsEqual(src, dst)) {
-      // contents are the same
-      return;
-    }
-    entry.src = src;
-    entry.dst = dst;
-    entriesToCopy.push(entry);
   });
 
   if (entriesToCopy.length > 0) {
@@ -98,7 +95,7 @@ command('load').description('.dotfiles > system').action(function(){
     ask('\nConfirm load changes [y/n] ? ', function(answer) {
       if (answer !== 'y') return;
       entriesToCopy.forEach(function(entry){
-        fse.copySync(entry.src, entry.dst);
+        copyEntryFromContentToSystem(entry);
       });
     });
   } else {
@@ -111,7 +108,9 @@ command('save').description('system > .dotfiles').action(function(){
   var state = load();
   var entriesToCopy = [];
   state.entries.forEach(function(entry){
-    if (canCopyEntry(entry)) {
+    var src = getEntrySystemPath(entry);
+    var dst = getEntryContentPath(entry);
+    if (canCopy(src, dst)) {
       entriesToCopy.push(entry);
     }
   });
@@ -121,7 +120,7 @@ command('save').description('system > .dotfiles').action(function(){
       if (answer !== 'y') return;
       var changedPaths = [];
       entriesToCopy.forEach(function(entry){
-        copyEntry(entry);
+        copyEntryFromSystemToContent(entry);
         changedPaths.push(entry.path);
       });
       commit('updated content ' + changedPaths.join(', '));
@@ -283,9 +282,7 @@ function ask(question, callback) {
   });
 }
 
-function canCopyEntry(entry) {
-  var src = getEntrySystemPath(entry);
-  var dst = getEntryContentPath(entry);
+function canCopy(src, dst) {
   var srcStat = fs.statSync(src);
   if (srcStat.isDirectory()) {
     console.error('not handling directories yet', src);
@@ -300,8 +297,21 @@ function canCopyEntry(entry) {
   return true;
 }
 
-function copyEntry(entry) {
-  if (canCopyEntry(entry)) {
+function copyEntryFromSystemToContent(entry) {
+  var src = getEntrySystemPath(entry);
+  var dst = getEntryContentPath(entry);
+  if (canCopy(src, dst)) {
+    fse.copySync(src, dst);  
+    return true;
+  } else {
+    return false;
+  }
+}
+
+function copyEntryFromContentToSystem(entry) {
+  var src = getEntryContentPath(entry);
+  var dst = getEntrySystemPath(entry);
+  if (canCopy(src, dst)) {
     fse.copySync(src, dst);  
     return true;
   } else {
@@ -350,4 +360,9 @@ function loadDiffFn() {
 function diff(a, b) {
   if (!__diffFn) __diffFn = loadDiffFn();
   __diffFn(a, b);
+}
+
+// http://stackoverflow.com/a/6969486
+function escapeRegExp(str) {
+  return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
 }
