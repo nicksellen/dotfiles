@@ -14,13 +14,16 @@ var DOTFILE_DIR = paths.join(HOME_DIR, '.dotfiles');
 var CONFIG_FILE = paths.join(DOTFILE_DIR, 'config.json');
 var FILES_DIR = paths.join(DOTFILE_DIR, 'content');
 
+var AUTO_PULL = true; // TODO: make it configurable
+var AUTO_PUSH = true; // TODO: make it configurable
+
 var HOME_DIR_RE = new RegExp('^' + escapeRegExp(HOME_DIR + '/'));
 
 command('list').description('list paths').action(printList);
 
 command('register [path]').description('register a path').action(function(path){
   if (!path) return console.error('requires path arg');
-  
+
   if (HOME_DIR_RE.test(path)) {
     path = '~' + path.substring(HOME_DIR.length);
   }
@@ -43,6 +46,7 @@ command('register [path]').description('register a path').action(function(path){
   copyEntryFromSystemToContent(entry);
   save(state);
   commit('registered ' + path);
+  if (AUTO_PUSH) git('push');
 });
 
 command('unregister [path]').description('unregister a path').action(function(path){
@@ -77,6 +81,8 @@ command('unregister [path]').description('unregister a path').action(function(pa
 });
 
 command('load').description('.dotfiles > system').action(function(){
+
+  if (AUTO_PULL) git('pull');
 
   var state = load();
 
@@ -124,6 +130,7 @@ command('save').description('system > .dotfiles').action(function(){
         changedPaths.push(entry.path);
       });
       commit('updated content ' + changedPaths.join(', '));
+      if (AUTO_PUSH) git('push');
     });
   } else {
     console.log('Nothing to do!');
@@ -173,8 +180,11 @@ command('diff [path]').description('show diff from system > .dotfiles').action(f
 });
 
 command('push').description('run git push').action(function(){
-  // just a shortcut for dotfiles git push really
-  git('push');
+  git('push'); // just a shortcut for git push
+});
+
+command('pull').description('run git pull').action(function(){
+  git('pull'); // just a shortcut for git push
 });
 
 command('git').description('run git commands in ' + DOTFILE_DIR).action(function(){
