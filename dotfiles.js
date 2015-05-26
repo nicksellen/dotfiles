@@ -14,27 +14,41 @@ var DOTFILE_DIR = paths.join(HOME_DIR, '.dotfiles');
 var CONFIG_FILE = paths.join(DOTFILE_DIR, 'config.json');
 var FILES_DIR = paths.join(DOTFILE_DIR, 'content');
 
-command('paths').description('list paths').action(function(){
+command('list').description('list paths').action(function(){
   var state = load();
   state.entries.forEach(function(entry){
     console.log(entry.path);
   });
 });
 
-command('add').description('register a path into dotfiles').action(function(path){
+command('register [path]').description('register a path').action(function(path){
+  if (!path) {
+    console.error('requires path arg');
+    return;
+  }
   var state = load();
   var entry = getEntryForPath(state, path);
   if (entry) return console.log('we have an existing entry for', path);
+  var src = path.replace(/~/g, HOME_DIR);
+  if (!fs.existsSync(src)) {
+    console.error(src, 'not found');
+    return;
+  }
   console.log('registering', path);
   state.entries.push({
     path: path,
-    guid: generateGuid()
+    guid: generateGuid(),
+    tags: {}
   });
   save(state);
-  commit('added ' + path);
+  commit('registered ' + path);
 });
 
-command('remove').description('unregister a path from dotfiles').action(function(path){
+command('unregister [path]').description('unregister a path').action(function(path){
+  if (!path) {
+    console.error('requires path arg');
+    return;
+  }
   var state = load();
   var changed = false;
   var i = 0;
@@ -42,6 +56,10 @@ command('remove').description('unregister a path from dotfiles').action(function
     var entry = state.entries[i];
     if (entry.path === path) {
       state.entries.splice(i, 1);
+      var contentPath = paths.join(FILES_DIR, entry.guid);
+      if (fs.existsSync(contentPath)) {
+        fs.unlinkSync(contentPath);
+      }
       changed = true;
     } else {
       i++;
@@ -49,42 +67,87 @@ command('remove').description('unregister a path from dotfiles').action(function
   }
   if (changed) {
     save(state);
-    commit('removed ' + path);
+    commit('unregistered ' + path);
   } else {
-    console.log('nothing matched');
+    console.log('Nothing to do!');
   }
 });
 
 command('load').description('.dotfiles > system').action(function(){
-  console.log('loading files');
+
+  var state = load();
+
+  var entriesToCopy = [];
+
+  state.entries.forEach(function(entry){
+    var src = paths.join(FILES_DIR, entry.guid);
+    var dst = entry.path.replace(/~/g, HOME_DIR);
+    if (!fs.existsSync(src)) {
+      console.error('missing content file for', entry.path, 'should be at', src);
+      return;
+    }
+    var dstStat = fs.statSync(dst);
+    if (dstStat.isDirectory()) {
+      console.error('not handling directories yet', dst);
+      return;
+    } else if (fileContentsEqual(src, dst)) {
+      // contents are the same
+      return;
+    }
+    entry.src = src;
+    entry.dst = dst;
+    entriesToCopy.push(entry);
+  });
+
+  if (entriesToCopy.length > 0) {
+    entriesToCopy.forEach(function(entry){
+      var src = entry.src;
+      var dst = entry.dst;
+      if (fs.existsSync(dst)) {
+        console.log('* overwrite', dst);
+      } else {
+        console.log('+ create   ', dst);
+      }
+    });
+    ask('Confirm [y/n] ? ', function(answer) {
+      if (answer !== 'y') return;
+      entriesToCopy.forEach(function(entry){
+        fse.copySync(entry.src, entry.dst);
+      });
+    });
+  } else {
+    console.log('Nothing to do!');
+  }
+
 });
 
 command('save').description('system > .dotfiles').action(function(){
   var state = load();
   var changedPaths = [];
+
   state.entries.forEach(function(entry){
-    var expandedPath = entry.path.replace(/~/g, HOME_DIR);
-    var contentPath = paths.join(FILES_DIR, entry.guid);
-    var stat = fs.statSync(expandedPath);
-    if (stat.isDirectory()) {
-      console.error('not handling directories yet', expandedPath);
+    var src = entry.path.replace(/~/g, HOME_DIR);
+    var dst = paths.join(FILES_DIR, entry.guid);
+    var srcStat = fs.statSync(src);
+    if (srcStat.isDirectory()) {
+      console.error('not handling directories yet', src);
       return;
-    } else if (!stat.isFile()) {
-      console.warn('not found on system', expandedPath);
+    } else if (!srcStat.isFile()) {
+      console.warn('not found on system', src);
       return;
-    } else if (fileContentsEqual(expandedPath, contentPath)) {
+    } else if (fileContentsEqual(src, dst)) {
       // contents are the same
       return;
     }
 
-    console.log('saving contents of', expandedPath, 'to', contentPath);
-    fse.copySync(expandedPath, contentPath);
+    console.log('saving contents of', src, 'to', dst);
+    fse.copySync(src, dst);
     changedPaths.push(entry.path);
   });
   if (changedPaths.length > 0) {
-    commit('updated ' + changedPaths.join(', '));
+    commit('updated content ' + changedPaths.join(', '));
   } else {
-    console.log('nothing changed!');
+    console.log('Nothing to do!');
   }
 });
 
@@ -221,4 +284,19 @@ function fileContentsEqual(a, b) {
   if (!a || !b) return false;
   if (!fs.existsSync(a) || !fs.existsSync(b)) return false;
   return fs.readFileSync(a).toString() === fs.readFileSync(b).toString();
+}
+
+function ask(question, callback) {
+  var readline = createReadline();
+  readline.question(question, function(answer) {
+    readline.close();
+    callback(answer);
+  });
+}
+
+function createReadline() {
+  return require('readline').createInterface({
+    input: process.stdin,
+    output: process.stdout
+  }); 
 }
