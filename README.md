@@ -18,7 +18,7 @@ npm install -g https://github.com/nicksellen/dotfiles
 
 ## coloured diff
 
-If you have `grc` on your path it will use it for coloured diffs.
+If you have [grc](https://github.com/garabik/grc) on your path it will use it for coloured diffs (`brew install grc` on osx does the trick).
 
 ![dotfiles save screenshot](http://nicksellen.co.uk/upld/dotfiles.save.png)
 
