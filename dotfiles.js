@@ -184,24 +184,26 @@ command('push').description('run git push').action(function(){
 });
 
 command('pull').description('run git pull').action(function(){
-  git('pull'); // just a shortcut for git push
+  git('pull'); // just a shortcut for git pull
 });
 
 command('git').description('run git commands in ' + DOTFILE_DIR).action(function(){
   // this never gets called as we handle it before that
-  // it's just so it appears in the list of commands
+  // it's just so it appears in the usage list
 });
 
 command('help').description('show help').action(function(arg) {
   app.help();
 });
 
+// unmatched
+// TODO: how do I stop this appearing in the usage?
 command('*').description('invalid command').action(function(arg) {
   console.error("invalid command: '%s'", arg);
   app.help();
 });
 
-// have to do it like this so commander doesn't try and parse git options
+// have to intercept the 'git' subcommand so we can take full control
 if (process.argv[2] === 'git') {
   var res = git.apply(null, process.argv.slice(3));
   process.exit(res.status);

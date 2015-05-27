@@ -10,7 +10,28 @@ Features:
 * tag entries for inclusion by os/hostname/architecture (coming soon)
 * include whole directory trees (coming soon)
 
-## init
+## installation
+
+It is not available on [npm](https://www.npmjs.com/) (I think it would need a rename first too) so you have to:
+
+````
+git clone https://github.com/nicksellen/dotfiles
+npm install -g dotfiles
+````
+
+## coloured diff
+
+If you have `grc` on your path it will use it for coloured diffs.
+
+![dotfiles save screenshot](http://nicksellen.co.uk/upld/dotfiles.save.png)
+
+## ~ handling
+
+If the path you register/unregister starts with your home dir it will replace it with a `~`. This means you don't need to worry about bash expansion of the `~` and you can use the dotfiles on another system and it'll still use your correct home dir.
+
+## commands
+
+### init
 
 ````
 dotfiles init
@@ -20,33 +41,31 @@ dotfiles init
 * creates `~/.dotfiles/config.json`
 * runs `git init` inside `~/.dotfiles`
 
-## register
+### register
 
 Register a path into dotfiles, and copy the contents.
 
 ````
-dotfiles register '~/.ssh/config'
+dotfiles register ~/.ssh/config
 ````
-
-(note the single quotes around arg to avoid bash expansion - we want it to be portable)
 
 * adds an entry to `~/.ssh/config.json`
 * copies the file into `~/.dotfiles/content/<uuid>`
 * `git add -A` and `git commit`
 
-## unregister
+### unregister
 
 Unregister a path from dotfiles, and remove the saved contents.
 
 ````
-dotfiles unregister '~/.ssh/config'
+dotfiles unregister ~/.ssh/config
 ````
 
 * removes entry from `~/.ssh/config.json` matching on name
 * removes the entry at `~/.dotfiles/content/<uuid>`
 * `git add -A` and `git commit`
 
-## save
+### save
 
 Copy changes from system into `~/.dotfiles`.
 
@@ -57,8 +76,9 @@ dotfiles save
 * loops through entries in `config.json`
 * if any files on system have changed, copy contents into `~/.dotfiles/content/<uuid>`
 * `git add -A` and `git commit` if any changes
+* shows a diff and asks for confirmation
 
-## load
+### load
 
 Load dotfiles onto your system
 
@@ -68,10 +88,10 @@ dotfiles load
 
 * loops through entries in `config.json`
 * if any files on system are different add to list
-* if list contains any entries, ask for confirmation
+* if list contains any entries, shows a diff and asks for confirmation
 * write content from `~/.dotfiles/content/<uuid>` to `<path>`
 
-## git
+### git
 
 You can run arbitary git commands, and they will be run from the `~/.dotfiles` dir - inspired by [pass](http://www.passwordstore.org/). 
 
