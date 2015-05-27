@@ -12,11 +12,8 @@ Features:
 
 ## installation
 
-It is not available on [npm](https://www.npmjs.com/) (I think it would need a rename first too) so you have to:
-
 ````
-git clone https://github.com/nicksellen/dotfiles
-npm install -g dotfiles
+npm install -g https://github.com/nicksellen/dotfiles
 ````
 
 ## coloured diff
@@ -65,6 +62,14 @@ dotfiles unregister ~/.ssh/config
 * removes the entry at `~/.dotfiles/content/<uuid>`
 * `git add -A` and `git commit`
 
+### list
+
+List all registered files.
+
+````
+dotfiles
+````
+
 ### save
 
 Copy changes from system into `~/.dotfiles`.
@@ -104,3 +109,10 @@ dotfiles git remote add origin <url>
 ````
 dotfiles git push -u origin master
 ````
+
+## TODO
+
+* make it handle directories properly
+* add some tests
+* make it handle tags/filters for entries
+* think about git branching
