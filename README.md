@@ -2,13 +2,13 @@
 
 Yet another dotfile manager.
 
-Features:
+Features/overview:
 
-* uses git to store file content
-* register entries with `~` - will get expanded on user system
-* allows arbitary git commands on repo (e.g. add remotes anyway you like)
-* tag entries for inclusion by os/hostname/architecture (coming soon)
-* include whole directory trees (coming soon)
+* register paths one-by-one for inclusion
+* store a copy of the file at each registered path and some metadata in `~/.dotfiles` along with a generated uuid
+* manage copying to/from the original path on your system
+* tag entries for inclusion on your system by os/hostname/architecture (coming soon)
+* `~/.dotfiles` is a git repo which you can manage arbitarily from anywhere with `dotfiles git <normal git args>` - add remotes/branches/whatever
 * not very mature - use at your own risk
 
 ## installation
@@ -81,8 +81,9 @@ dotfiles save
 
 * loops through entries in `config.json`
 * if any files on system have changed, copy contents into `~/.dotfiles/content/<uuid>`
-* `git add -A` and `git commit` if any changes
-* shows a diff and asks for confirmation
+* if any changes shows a diff and asks for confirmation
+* `git add -A` and `git commit`
+* `git push` (should be made configurable)
 
 ### load
 
@@ -92,6 +93,7 @@ Load dotfiles onto your system
 dotfiles load
 ````
 
+* `git pull` (should be made configurable)
 * loops through entries in `config.json`
 * if any files on system are different add to list
 * if list contains any entries, shows a diff and asks for confirmation
