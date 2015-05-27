@@ -9,6 +9,7 @@ Features:
 * allows arbitary git commands on repo (e.g. add remotes anyway you like)
 * tag entries for inclusion by os/hostname/architecture (coming soon)
 * include whole directory trees (coming soon)
+* not very mature - use at your own risk
 
 ## installation
 
