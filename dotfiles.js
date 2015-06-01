@@ -55,6 +55,7 @@ command('tag [path] [key] [value]').description('tag a path').action(function(pa
   entry.tags[key] = value;
   save(state);
   git('add', 'config.json');
+  git('commit', '-m', format('tagged %s %s=%s', path, key, value));
 });
 
 command('untag [path] [key]').description('tag a path').action(function(path, key){
@@ -69,6 +70,7 @@ command('untag [path] [key]').description('tag a path').action(function(path, ke
   delete entry.tags[key];
   save(state);
   git('add', 'config.json');
+  git('commit', '-m', format('untagged %s %s', path, key));
 });
 
 command('add [path]').description('register a path').action(function(path){
