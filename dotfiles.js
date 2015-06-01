@@ -138,12 +138,13 @@ command('save').description('system > .dotfiles').action(function(){
 });
 
 command('init').description('init ' + DOTFILE_DIR).action(function(){
-  var stat = fs.statSync(DOTFILE_DIR);
 
-  if (stat.isFile()) {
-    console.error('cannot be file', DOTFILE_DIR);
-    process.exit(2);
-  } else if (!stat.isDirectory()) {
+  if (fs.existsSync(DOTFILE_DIR)) {
+    if (fs.statSync(DOTFILE_DIR).isFile()) {
+      console.error('cannot be file', DOTFILE_DIR);
+      process.exit(2);
+    }
+  } else {
     fs.mkdirSync(DOTFILE_DIR);
   }
   git('init');
