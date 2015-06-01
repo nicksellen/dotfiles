@@ -6,6 +6,8 @@ var spawnSync = require('child_process').spawnSync;
 var fs = require('fs');
 var fse = require('fs-extra');
 var paths = require('path');
+var format = require('util').format;
+var os = require('os');
 
 var command = app.command.bind(app);
 
@@ -17,19 +19,66 @@ var FILES_DIR = paths.join(DOTFILE_DIR, 'content');
 var AUTO_PULL = true; // TODO: make it configurable
 var AUTO_PUSH = true; // TODO: make it configurable
 
+var ALL = function(){ return true; };
+
+var SYSTEM_TAGS = {};
+SYSTEM_TAGS.os = os.platform();
+SYSTEM_TAGS.hostname = os.hostname();
+
 var HOME_DIR_RE = new RegExp('^' + escapeRegExp(HOME_DIR + '/'));
+
+function check(ok, errorMessage) {
+  if (ok) return;
+  var fmtArgs = new Array(arguments.length - 1);
+  fmtArgs[0] = errorMessage;
+  for (var i = 2; i < arguments.length; i++) {
+    fmtArgs[i - 1] = arguments[i];
+  }
+  console.error(format.apply(null, fmtArgs));
+  process.exit(1);
+}
+
+app.option('-x, --expand', 'expand ~ (list command)');
+app.option('-t, --tags', 'print tags too (list command)');
+app.option('-a, --all', 'include entries not for this system (list command)');
 
 command('list').description('list paths').action(printList);
 
-command('register [path]').description('register a path').action(function(path){
-  if (!path) return console.error('requires path arg');
-
-  if (HOME_DIR_RE.test(path)) {
-    path = '~' + path.substring(HOME_DIR.length);
-  }
+command('tag [path] [key] [value]').description('tag a path').action(function(path, key, value){
+  check(path && key && value, 'path/key/value required');
+  path = collapseHomeDir(path);
   var state = load();
   var entry = getEntryForPath(state, path);
-  if (entry) return console.log('we have an existing entry for', path);
+  check(entry, 'no entry found for %s', path);
+  console.log('tagging', path, key, value);
+  if (!entry.tags) entry.tags = {};
+  entry.tags[key] = value;
+  save(state);
+  git('add', 'config.json');
+});
+
+command('untag [path] [key]').description('tag a path').action(function(path, key){
+  check(path && key, 'path/key required');
+  path = collapseHomeDir(path);
+  var state = load();
+  var entry = getEntryForPath(state, path);
+  check(entry, 'no entry found for %s', path);
+  if (!entry.tags) entry.tags = {};
+  check(entry.tags.hasOwnProperty(key), '%s is not tagged with %s', path, key);
+  console.log('untagging', path, key);
+  delete entry.tags[key];
+  save(state);
+  git('add', 'config.json');
+});
+
+command('add [path]').description('register a path').action(function(path){
+  if (!path) return console.error('requires path arg');
+
+  path = collapseHomeDir(path);
+
+  var state = load();
+  var entry = getEntryForPath(state, path);
+  check(!entry, 'we have an existing entry for %s', path);
 
   var entry = {
     path: path,
@@ -45,16 +94,13 @@ command('register [path]').description('register a path').action(function(path){
   state.entries.push(entry);
   copyEntryFromSystemToContent(entry);
   save(state);
-  commit('registered ' + path);
-  if (AUTO_PUSH) git('push');
+  git('add', '-A');
 });
 
-command('unregister [path]').description('unregister a path').action(function(path){
+command('rm [path]').description('unregister a path').action(function(path){
   if (!path) return console.error('requires path arg');
 
-  if (HOME_DIR_RE.test(path)) {
-    path = '~' + path.substring(HOME_DIR.length);
-  }
+  path = collapseHomeDir(path);
 
   var state = load();
   var changed = false;
@@ -74,7 +120,7 @@ command('unregister [path]').description('unregister a path').action(function(pa
   }
   if (changed) {
     save(state);
-    commit('unregistered ' + path);
+    git('add', '-A');
   } else {
     console.log('Nothing to do!');
   }
@@ -88,7 +134,7 @@ command('load').description('.dotfiles > system').action(function(){
 
   var entriesToCopy = [];
 
-  state.entries.forEach(function(entry){
+  state.entries.filter(entryIsForThisSystem).forEach(function(entry){
     var src = getEntryContentPath(entry);
     var dst = getEntrySystemPath(entry);
     if (canCopy(src, dst)) {
@@ -110,10 +156,10 @@ command('load').description('.dotfiles > system').action(function(){
 
 });
 
-command('save').description('system > .dotfiles').action(function(){
+command('save [message]').description('system > .dotfiles').action(function(message){
   var state = load();
   var entriesToCopy = [];
-  state.entries.forEach(function(entry){
+  state.entries.filter(entryIsForThisSystem).forEach(function(entry){
     var src = getEntrySystemPath(entry);
     var dst = getEntryContentPath(entry);
     if (canCopy(src, dst)) {
@@ -129,7 +175,7 @@ command('save').description('system > .dotfiles').action(function(){
         copyEntryFromSystemToContent(entry);
         changedPaths.push(entry.path);
       });
-      commit('updated content ' + changedPaths.join(', '));
+      commit(message || 'updated content ' + changedPaths.join(', '));
       if (AUTO_PUSH) git('push');
     });
   } else {
@@ -261,11 +307,23 @@ function getEntryForPath(state, path) {
 }
 
 function getEntrySystemPath(entry) {
-  return entry.path.replace(/~/g, HOME_DIR);
+  return expandHomeDir(entry.path);
 }
 
 function getEntryContentPath(entry) {
   return paths.join(FILES_DIR, entry.guid);  
+}
+
+function expandHomeDir(path) {
+  return path.replace(/~/g, HOME_DIR);
+}
+
+function collapseHomeDir(path) {
+  if (HOME_DIR_RE.test(path)) {
+    return '~' + path.substring(HOME_DIR.length);
+  } else {
+    return path;
+  }
 }
 
 function generateGuid() {
@@ -296,6 +354,10 @@ function ask(question, callback) {
 }
 
 function canCopy(src, dst) {
+  if (!fs.existsSync(src)) {
+    console.warn('not found on system', src);
+    return false;
+  }
   var srcStat = fs.statSync(src);
   if (srcStat.isDirectory()) {
     console.error('not handling directories yet', src);
@@ -334,8 +396,19 @@ function copyEntryFromContentToSystem(entry) {
 
 function printList() {
   var state = load();
-  state.entries.forEach(function(entry){
-    console.log(entry.path);
+  var filter = app.all ? ALL : entryIsForThisSystem;
+  state.entries.filter(filter).forEach(function(entry){
+    var path = entry.path;
+    if (app.expand) {
+      path = expandHomeDir(path);
+    }
+    if (app.tags && entry.tags) {
+      path += ' ';
+      path += Object.keys(entry.tags).sort().map(function(tag){
+        return format('%s=%s', tag, entry.tags[tag]);
+      }).join(' ');
+    }
+    console.log(path);
   });
 }
 
@@ -345,6 +418,21 @@ function argumentsToArray(args) {
     ary[i] = args[i];
   }
   return ary;
+}
+
+function entryIsForThisSystem(entry) {
+  if (!entry.tags) return true;
+  var tagKeys = Object.keys(SYSTEM_TAGS);
+  for (var i = 0; i < tagKeys.length; i++) {
+    var key = tagKeys[i];
+    if (!entry.tags.hasOwnProperty(key)) continue;
+    var systemValue = SYSTEM_TAGS[key];
+    var entryValue = entry.tags[key];
+    if (systemValue !== entryValue) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function diffEntries(entries, inverse) {
