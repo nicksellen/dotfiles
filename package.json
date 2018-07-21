@@ -3,8 +3,8 @@
   "version": "0.1.7",
   "description": "",
   "main": "dotfiles.js",
-  "bin" : {
-    "dotfiles" : "dotfiles.js"
+  "bin": {
+    "dotfiles": "dotfiles.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
