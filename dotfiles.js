@@ -54,8 +54,7 @@ command('tag [path] [key] [value]').description('tag a path').action(function(pa
   if (!entry.tags) entry.tags = {};
   entry.tags[key] = value;
   save(state);
-  git('add', 'config.json');
-  git('commit', '-m', format('tagged %s %s=%s', path, key, value));
+  commit(format('tagged %s %s=%s', path, key, value))
 });
 
 command('untag [path] [key]').description('tag a path').action(function(path, key){
@@ -69,8 +68,7 @@ command('untag [path] [key]').description('tag a path').action(function(path, ke
   console.log('untagging', path, key);
   delete entry.tags[key];
   save(state);
-  git('add', 'config.json');
-  git('commit', '-m', format('untagged %s %s', path, key));
+  commit(format('untagged %s %s', path, key))
 });
 
 command('add [path...]').description('register a path').action(function(paths){
@@ -107,8 +105,7 @@ command('add [path...]').description('register a path').action(function(paths){
   }
 
   save(state);
-  git('add', '-A');
-  if (AUTO_PUSH) git('push');
+  commit('added ' + newEntries.map(e => e.path).join(', '));
 });
 
 command('rm [path]').description('unregister a path').action(function(path){
@@ -134,8 +131,7 @@ command('rm [path]').description('unregister a path').action(function(path){
   }
   if (changed) {
     save(state);
-    git('add', '-A');
-    if (AUTO_PUSH) git('push');
+    commit('removed ' + path);
   } else {
     console.log('Nothing to do!');
   }
@@ -191,7 +187,6 @@ command('save [message]').description('system > .dotfiles').action(function(mess
         changedPaths.push(entry.path);
       });
       commit(message || 'updated content ' + changedPaths.join(', '));
-      if (AUTO_PUSH) git('push');
     });
   } else {
     console.log('Nothing to do!');
@@ -310,6 +305,7 @@ function save(state) {
 function commit(message) {
   git('add', '-A');
   git('commit', '-m', message || 'update');
+  if (AUTO_PUSH) git('push');
 }
 
 function getEntryForPath(state, path) {
