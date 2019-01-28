@@ -99,8 +99,8 @@ command('add [path...]').description('register a path').action(function(paths){
     newEntries.push(entry);
   }
 
-  check(entries.length > 0, 'nothing to add!');
-  
+  check(newEntries.length > 0, 'nothing to add!');
+
   for (let entry of newEntries) {
     state.entries.push(entry);
     copyEntryFromSystemToContent(entry);
