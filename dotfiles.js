@@ -73,30 +73,42 @@ command('untag [path] [key]').description('tag a path').action(function(path, ke
   git('commit', '-m', format('untagged %s %s', path, key));
 });
 
-command('add [path]').description('register a path').action(function(path){
-  if (!path) return console.error('requires path arg');
+command('add [path...]').description('register a path').action(function(paths){
+  if (!paths || paths.length === 0) return console.error('requires at least one path');
 
-  path = collapseHomeDir(path);
+  const newEntries = [];
 
-  var state = load();
-  var entry = getEntryForPath(state, path);
-  check(!entry, 'we have an existing entry for %s', path);
+  for (let path of paths) {
+    path = collapseHomeDir(path);
 
-  var entry = {
-    path: path,
-    guid: generateGuid(),
-    tags: {}
-  };
+    var state = load();
+    var entry = getEntryForPath(state, path);
+    if (entry) continue;
 
-  var src = getEntrySystemPath(entry);
-  if (!fs.existsSync(src)) {
-    console.error(src, 'not found');
-    return;
+    var entry = {
+      path: path,
+      guid: generateGuid(),
+      tags: {}
+    };
+
+    var src = getEntrySystemPath(entry);
+    if (!fs.existsSync(src)) {
+      console.error(src, 'not found');
+      return;
+    }
+    newEntries.push(entry);
   }
-  state.entries.push(entry);
-  copyEntryFromSystemToContent(entry);
+
+  check(entries.length > 0, 'nothing to add!');
+  
+  for (let entry of newEntries) {
+    state.entries.push(entry);
+    copyEntryFromSystemToContent(entry);
+  }
+
   save(state);
   git('add', '-A');
+  if (AUTO_PUSH) git('push');
 });
 
 command('rm [path]').description('unregister a path').action(function(path){
@@ -123,6 +135,7 @@ command('rm [path]').description('unregister a path').action(function(path){
   if (changed) {
     save(state);
     git('add', '-A');
+    if (AUTO_PUSH) git('push');
   } else {
     console.log('Nothing to do!');
   }
